@@ -1,0 +1,69 @@
+.controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background-color: #0066cc;
+  color: white;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 130px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+button:hover:not([disabled]) {
+  background-color: #0052a3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+button:active:not([disabled]) {
+  transform: translateY(0);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.15);
+}
+
+button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+button:nth-child(1) {
+  background-color: #4caf50; /* Green for Join */
+}
+
+button:nth-child(1):hover:not([disabled]) {
+  background-color: #3d8b40;
+}
+
+button:nth-child(2) {
+  background-color: #f44336; /* Red for Leave */
+}
+
+button:nth-child(2):hover:not([disabled]) {
+  background-color: #d32f2f;
+}
+
+@media (max-width: 600px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  button {
+    width: 100%;
+  }
+}
