@@ -8,6 +8,10 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Create .npmrc to allow mediasoup build scripts
+RUN echo "enable-pre-post-scripts=true" > .npmrc
+RUN echo "trusted-dependencies[]=mediasoup" >> .npmrc
+
 # Copy package files
 COPY package.json package-lock.json* ./
 
