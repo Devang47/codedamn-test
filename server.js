@@ -3,21 +3,22 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mediasoup = require("mediasoup");
 const fetch = require("node-fetch");
+const os = require("os");
 
-// Basic server setup
+// Server setup
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 app.use(express.static(__dirname));
 
-// MediaSoup objects
+// MediaSoup state
 const mediasoupWorkers = [];
-const numWorkers = Object.keys(require("os").cpus()).length;
+const numWorkers = Object.keys(os.cpus()).length;
 let nextWorkerIndex = 0;
 let workersReady = false;
 const rooms = new Map();
 
-// MediaSoup settings - simplified
+// MediaSoup settings
 const mediasoupSettings = {
   worker: {
     rtcMinPort: 40000,
@@ -49,7 +50,7 @@ const mediasoupSettings = {
   },
 };
 
-// Initialize MediaSoup workers
+// Initialize workers
 async function initializeMediasoupWorkers() {
   for (let i = 0; i < numWorkers; i++) {
     const worker = await mediasoup.createWorker({
@@ -64,18 +65,16 @@ async function initializeMediasoupWorkers() {
   workersReady = true;
 }
 
-// Helper functions - minimized
-function getNextWorker() {
-  const worker = mediasoupWorkers[nextWorkerIndex];
-  nextWorkerIndex = (nextWorkerIndex + 1) % mediasoupWorkers.length;
-  return worker;
-}
+// Helper functions
+const getNextWorker = () =>
+  mediasoupWorkers[
+    (nextWorkerIndex = (nextWorkerIndex + 1) % mediasoupWorkers.length)
+  ];
 
-async function createRouter() {
-  return await getNextWorker().createRouter({
+const createRouter = async () =>
+  await getNextWorker().createRouter({
     mediaCodecs: mediasoupSettings.router.mediaCodecs,
   });
-}
 
 async function createWebRtcTransport(router, options = {}) {
   try {
@@ -138,11 +137,8 @@ function removeParticipant(roomId, userId) {
   const participant = room.participants.get(userId);
   if (!participant) return;
 
-  // Close all transports
-  for (const transport of participant.transports.values()) {
-    transport.close();
-  }
-
+  // Close transports
+  participant.transports.forEach((transport) => transport.close());
   room.participants.delete(userId);
 
   // Clean up empty rooms
@@ -152,27 +148,24 @@ function removeParticipant(roomId, userId) {
   }
 }
 
-// Socket.IO connection handler
+// Socket.IO handlers
 io.on("connection", (socket) => {
   let participantDetails = { roomId: null, userId: null };
 
   // Join room & get capabilities
   socket.on("getRouterRtpCapabilities", async ({ roomId, userId }) => {
-    if (!workersReady) {
-      socket.emit("error", { message: "Server not ready" });
-      return;
-    }
+    if (!workersReady)
+      return socket.emit("error", { message: "Server not ready" });
 
-    participantDetails.roomId = roomId;
-    participantDetails.userId = userId;
+    participantDetails = { roomId, userId };
 
     try {
       const room = await getOrCreateRoom(roomId);
       const participant = addParticipant(roomId, userId, socket);
-      if (!participant) {
-        socket.emit("error", { message: "Could not add participant to room" });
-        return;
-      }
+      if (!participant)
+        return socket.emit("error", {
+          message: "Could not add participant to room",
+        });
 
       socket.to(roomId).emit("participantJoined", { userId });
       socket.join(roomId);
@@ -187,32 +180,29 @@ io.on("connection", (socket) => {
     "createWebRtcTransport",
     async ({ type, roomId, userId, forceTcp }) => {
       try {
-        if (!roomId || !userId) {
-          socket.emit("error", { message: "Missing roomId or userId", type });
-          return;
-        }
+        if (!roomId || !userId)
+          return socket.emit("error", {
+            message: "Missing roomId or userId",
+            type,
+          });
 
         const room = rooms.get(roomId);
-        if (!room) {
-          socket.emit("error", { message: "Room not found", type });
-          return;
-        }
+        if (!room)
+          return socket.emit("error", { message: "Room not found", type });
 
         // Get or create participant
         let participant = room.participants.get(userId);
         if (!participant) {
           participant = addParticipant(roomId, userId, socket);
-          if (!participant) {
-            socket.emit("error", {
+          if (!participant)
+            return socket.emit("error", {
               message: "Cannot add participant to room",
               type,
             });
-            return;
-          }
           socket.join(roomId);
         }
 
-        // Get announcedIp (public IP)
+        // Get announcedIp
         let announcedIp = process.env.PUBLIC_IP;
         if (!announcedIp) {
           try {
@@ -225,20 +215,16 @@ io.on("connection", (socket) => {
         }
 
         // Create transport
-        const transportOptions = {
+        const transportData = await createWebRtcTransport(room.router, {
           enableUdp: !forceTcp,
           enableTcp: true,
           preferUdp: !forceTcp,
           listenIps: [{ ip: "0.0.0.0", announcedIp }],
-        };
+        });
 
-        const transportData = await createWebRtcTransport(
-          room.router,
-          transportOptions
-        );
         participant.transports.set(transportData.id, transportData.transport);
 
-        // Send transport data to client
+        // Send transport data
         socket.emit("transportCreated", {
           type,
           id: transportData.id,
@@ -267,13 +253,12 @@ io.on("connection", (socket) => {
         const participant = Array.from(room.participants.values()).find((p) =>
           p.transports.has(transportId)
         );
-        if (!participant) return;
-
-        await participant.transports
-          .get(transportId)
-          .connect({ dtlsParameters });
+        if (participant)
+          await participant.transports
+            .get(transportId)
+            .connect({ dtlsParameters });
       } catch (error) {
-        // Error handling is minimal but essential
+        /* Minimal error handling */
       }
     }
   );
@@ -284,29 +269,27 @@ io.on("connection", (socket) => {
     async ({ transportId, kind, rtpParameters, roomId, userId }, callback) => {
       try {
         const room = rooms.get(roomId);
-        if (!room) return callback({ error: `Room not found` });
+        if (!room) return callback({ error: "Room not found" });
 
         const participant = room.participants.get(userId);
-        if (!participant) return callback({ error: `Participant not found` });
+        if (!participant) return callback({ error: "Participant not found" });
 
         const transport = participant.transports.get(transportId);
-        if (!transport) return callback({ error: `Transport not found` });
+        if (!transport) return callback({ error: "Transport not found" });
 
         // Create producer
         const producer = await transport.produce({ kind, rtpParameters });
         participant.producers.set(producer.id, producer);
-
-        // Add to room's producer list
         room.producers.push({ id: producer.id, userId, kind });
 
-        // Cleanup on transport close
+        // Cleanup
         producer.on("transportclose", () => {
           producer.close();
           participant.producers.delete(producer.id);
         });
 
         // Notify others
-        for (const otherParticipant of room.participants.values()) {
+        room.participants.forEach((otherParticipant) => {
           if (otherParticipant.id !== userId) {
             otherParticipant.socket.emit("newProducer", {
               producerId: producer.id,
@@ -314,7 +297,7 @@ io.on("connection", (socket) => {
               kind,
             });
           }
-        }
+        });
 
         callback({ id: producer.id });
       } catch (error) {
@@ -328,7 +311,6 @@ io.on("connection", (socket) => {
     const room = rooms.get(roomId);
     if (!room) return;
 
-    // Only send producers that aren't the user's own
     const existingProducers = room.producers
       .filter((p) => p.userId !== requestingUserId)
       .map((p) => ({
@@ -349,12 +331,12 @@ io.on("connection", (socket) => {
     ) => {
       try {
         const room = rooms.get(roomId);
-        if (!room) return callback({ error: `Room not found` });
+        if (!room) return callback({ error: "Room not found" });
 
         const producerData = room.producers.find(
           (p) => p.id === remoteProducerId
         );
-        if (!producerData) return callback({ error: `Producer not found` });
+        if (!producerData) return callback({ error: "Producer not found" });
 
         const participant = Array.from(room.participants.values()).find((p) =>
           p.transports.has(transportId)
@@ -363,16 +345,15 @@ io.on("connection", (socket) => {
           return callback({ error: "Participant or transport not found" });
 
         const transport = participant.transports.get(transportId);
-        if (!transport) return callback({ error: `Transport not found` });
+        if (!transport) return callback({ error: "Transport not found" });
 
         if (
           !room.router.canConsume({
             producerId: remoteProducerId,
             rtpCapabilities,
           })
-        ) {
+        )
           return callback({ error: "Cannot consume producer" });
-        }
 
         const consumer = await transport.consume({
           producerId: remoteProducerId,
@@ -418,12 +399,12 @@ io.on("connection", (socket) => {
       const participant = Array.from(room.participants.values()).find((p) =>
         p.consumers.has(consumerId)
       );
-      if (!participant) return;
-
-      const consumer = participant.consumers.get(consumerId);
-      if (consumer) await consumer.resume();
+      if (participant) {
+        const consumer = participant.consumers.get(consumerId);
+        if (consumer) await consumer.resume();
+      }
     } catch (error) {
-      // Minimal error handling
+      /* Minimal error handling */
     }
   });
 
@@ -433,8 +414,7 @@ io.on("connection", (socket) => {
       socket.to(roomId).emit("participantLeft", { userId });
       socket.leave(roomId);
       removeParticipant(roomId, userId);
-      participantDetails.roomId = null;
-      participantDetails.userId = null;
+      participantDetails = { roomId: null, userId: null };
     }
   });
 
