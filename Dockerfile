@@ -1,4 +1,4 @@
-FROM node:16
+FROM node:20
 
 WORKDIR /app
 
@@ -12,7 +12,8 @@ RUN apt-get update && \
 COPY package.json package-lock.json* ./
 
 # Install dependencies
-RUN npm install
+RUN npm install -g pnpm
+RUN pnpm install
 
 # Copy application files
 COPY . .
