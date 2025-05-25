@@ -1,33 +1,30 @@
-FROM node:20
+FROM node:18-bullseye
 
 WORKDIR /app
 
-# Install dependencies required for mediasoup
-RUN apt-get update && \
-    apt-get install -y net-tools build-essential python3 python3-pip && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Install build dependencies for mediasoup
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create .npmrc to allow mediasoup build scripts
 RUN echo "enable-pre-post-scripts=true" > .npmrc
 RUN echo "trusted-dependencies[]=mediasoup" >> .npmrc
 
 # Copy package files
-COPY package.json package-lock.json* ./
+COPY package*.json ./
 
 # Install dependencies
-RUN npm install -g pnpm
-RUN pnpm install
+RUN npm install
 
-# Copy application files
+# Copy application code
 COPY . .
 
-# Expose the server port
+# Expose the port your app runs on
 EXPOSE 3000
 
-# Expose the range of ports for WebRTC
-EXPOSE 40000-49999/udp
-EXPOSE 40000-49999/tcp
-
-# Start the server
-CMD ["node", "server.js"]
+# Command to run the application
+CMD ["npm", "start"]

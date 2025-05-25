@@ -37,6 +37,7 @@ type MediaSoupState = {
   localStream: MediaStream | null;
   isConnected: boolean;
   participants: Map<string, Participant>;
+  isSpectator: boolean;
 };
 
 type MediaSoupContextType = {
@@ -47,6 +48,7 @@ type MediaSoupContextType = {
   toggleVideo: () => void;
   isAudioEnabled: boolean;
   isVideoEnabled: boolean;
+  joinRoomAsSpectator: () => Promise<void>;
 };
 
 // Default state
@@ -62,6 +64,7 @@ const defaultState: MediaSoupState = {
   localStream: null,
   isConnected: false,
   participants: new Map(),
+  isSpectator: false,
 };
 
 // Context setup
@@ -262,39 +265,52 @@ export const MediaSoupProvider = ({ children }: { children: ReactNode }) => {
       state.device &&
       state.socket &&
       state.isConnected &&
-      !state.sendTransport &&
-      !state.recvTransport
+      !state.recvTransport &&
+      (!state.sendTransport || state.isSpectator)
     ) {
-      const transportOptions = {
-        forceTcp: false,
-        iceTransportPolicy: "all",
-        additionalSettings: {
-          iceServers: [
-            {
-              urls: [
-                "stun:stun.l.google.com:19302",
-                "stun:stun1.l.google.com:19302",
-              ],
-            },
-          ],
-        },
-      };
+      // For spectator mode, only create receive transport
+      if (state.isSpectator) {
+        // Create receive transport only
+        state.socket.emit("createWebRtcTransport", {
+          forceTcp: false,
+          iceTransportPolicy: "all",
+          type: "recv",
+          roomId: state.roomId,
+          userId: state.userId,
+          isSpectator: true,
+        });
+      } else {
+        const transportOptions = {
+          forceTcp: false,
+          iceTransportPolicy: "all",
+          additionalSettings: {
+            iceServers: [
+              {
+                urls: [
+                  "stun:stun.l.google.com:19302",
+                  "stun:stun1.l.google.com:19302",
+                ],
+              },
+            ],
+          },
+        };
 
-      // Create send transport
-      state.socket.emit("createWebRtcTransport", {
-        ...transportOptions,
-        type: "send",
-        roomId: state.roomId,
-        userId: state.userId,
-      });
+        // Create send transport
+        state.socket.emit("createWebRtcTransport", {
+          ...transportOptions,
+          type: "send",
+          roomId: state.roomId,
+          userId: state.userId,
+        });
 
-      // Create receive transport
-      state.socket.emit("createWebRtcTransport", {
-        ...transportOptions,
-        type: "recv",
-        roomId: state.roomId,
-        userId: state.userId,
-      });
+        // Create receive transport
+        state.socket.emit("createWebRtcTransport", {
+          ...transportOptions,
+          type: "recv",
+          roomId: state.roomId,
+          userId: state.userId,
+        });
+      }
     }
   }, [
     state.device,
@@ -304,6 +320,7 @@ export const MediaSoupProvider = ({ children }: { children: ReactNode }) => {
     state.userId,
     state.sendTransport,
     state.recvTransport,
+    state.isSpectator,
   ]);
 
   // Join room and get media
@@ -369,6 +386,34 @@ export const MediaSoupProvider = ({ children }: { children: ReactNode }) => {
       }, 300);
     } catch (error) {
       alert(`Failed to join room: ${(error as Error).message}`);
+    }
+  };
+
+  // Join room as a spectator (watch only)
+  const joinRoomAsSpectator = async () => {
+    try {
+      if (!state.socket) {
+        alert("Socket connection not established. Cannot join room.");
+        return;
+      }
+
+      // Set spectator mode
+      setState((prevState) => ({
+        ...prevState,
+        isSpectator: true,
+        isConnected: true,
+      }));
+
+      // Initialize connection with slight delay to ensure socket is ready
+      setTimeout(() => {
+        state.socket?.emit("getRouterRtpCapabilities", {
+          roomId: state.roomId,
+          userId: state.userId,
+          isSpectator: true,
+        });
+      }, 300);
+    } catch (error) {
+      alert(`Failed to join as spectator: ${(error as Error).message}`);
     }
   };
 
@@ -801,6 +846,7 @@ export const MediaSoupProvider = ({ children }: { children: ReactNode }) => {
         toggleVideo,
         isAudioEnabled,
         isVideoEnabled,
+        joinRoomAsSpectator,
       }}
     >
       {children}

@@ -1,13 +1,11 @@
-import type { FC } from "react";
-import "./Controls.css";
 import { useMediaSoup } from "../context/MediaSoupContext";
 
 interface ControlsProps {
   isJoined: boolean;
-  setIsJoined: (isJoined: boolean) => void;
+  setIsJoined: (joined: boolean) => void;
 }
 
-const Controls: FC<ControlsProps> = ({ isJoined, setIsJoined }) => {
+function Controls({ isJoined, setIsJoined }: ControlsProps) {
   const {
     joinRoom,
     leaveRoom,
@@ -17,44 +15,37 @@ const Controls: FC<ControlsProps> = ({ isJoined, setIsJoined }) => {
     isVideoEnabled,
   } = useMediaSoup();
 
-  const handleJoin = async () => {
-    try {
-      await joinRoom();
-      setIsJoined(true);
-    } catch (error) {
-      console.error("Failed to join room:", error);
-    }
+  const handleJoinClick = async () => {
+    await joinRoom();
+    setIsJoined(true);
   };
 
-  const handleLeave = () => {
+  const handleLeaveClick = () => {
     leaveRoom();
     setIsJoined(false);
   };
 
-  const handleToggleAudio = () => {
-    toggleAudio();
-  };
-
-  const handleToggleVideo = () => {
-    toggleVideo();
-  };
-
   return (
     <div className="controls">
-      <button onClick={handleJoin} disabled={isJoined}>
-        Join Room
-      </button>
-      <button onClick={handleLeave} disabled={!isJoined}>
-        Leave Room
-      </button>
-      <button onClick={handleToggleAudio} disabled={!isJoined}>
-        {isAudioEnabled ? "Mute Audio" : "Unmute Audio"}
-      </button>
-      <button onClick={handleToggleVideo} disabled={!isJoined}>
-        {isVideoEnabled ? "Turn Off Video" : "Turn On Video"}
-      </button>
+      {!isJoined ? (
+        <button className="control-button primary" onClick={handleJoinClick}>
+          Stream Video
+        </button>
+      ) : (
+        <>
+          <button className="control-button" onClick={toggleAudio}>
+            {isAudioEnabled ? "🎤 Mute" : "🔇 Unmute"}
+          </button>
+          <button className="control-button" onClick={toggleVideo}>
+            {isVideoEnabled ? "📹 Hide Video" : "🚫 Show Video"}
+          </button>
+          <button className="control-button danger" onClick={handleLeaveClick}>
+            <span className="icon">⏏️</span> Leave Room
+          </button>
+        </>
+      )}
     </div>
   );
-};
+}
 
 export default Controls;

@@ -1,19 +1,18 @@
-import { useState } from "react";
 import "./App.css";
-import VideoContainer from "./components/VideoContainer";
-import Controls from "./components/Controls";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MediaSoupProvider } from "./context/MediaSoupContext";
+import Home from "./pages/Home";
+import Watch from "./pages/Watch";
 
 function App() {
-  const [isJoined, setIsJoined] = useState(false);
-
   return (
     <MediaSoupProvider>
-      <div className="container">
-        <h1>MediaSoup Video Conference</h1>
-        <Controls isJoined={isJoined} setIsJoined={setIsJoined} />
-        <VideoContainer />
-      </div>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/watch" element={<Watch />} />
+        </Routes>
+      </BrowserRouter>
     </MediaSoupProvider>
   );
 }
